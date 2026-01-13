@@ -120,7 +120,7 @@ audio: file (audio file)
 {
   "matched": true,
   "score": 0.87,
-  "threshold": 0.25,
+  "threshold": 0.90,
   "user_id": "user123",
   "message": "Voice matched - authentication successful"
 }
@@ -214,7 +214,7 @@ Configuration is managed via environment variables or a `.env` file:
 | `APP_NAME` | Voice Banking API | Application name |
 | `APP_VERSION` | 1.0.0 | API version |
 | `DEBUG` | false | Enable debug mode |
-| `SIMILARITY_THRESHOLD` | 0.25 | Voice match threshold (0-1) |
+| `SIMILARITY_THRESHOLD` | 0.90 | Voice match threshold (0-1) |
 | `MIN_ENROLLMENT_SAMPLES` | 5 | Samples required to complete enrollment |
 | `MAX_ENROLLMENT_SAMPLES` | 10 | Maximum samples allowed per enrollment |
 | `ENROLLMENT_TIMEOUT_HOURS` | 24 | Auto-expire pending enrollments (hours) |
@@ -237,7 +237,7 @@ Configuration is managed via environment variables or a `.env` file:
 1. User provides audio for authentication
 2. Embedding is extracted from audio
 3. Cosine similarity is computed against stored centroid
-4. Match decision based on threshold (default: 0.25)
+4. Match decision based on threshold (default: 0.90)
 
 ### Why Centroid?
 

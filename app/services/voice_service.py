@@ -14,6 +14,7 @@ from typing import Optional, Tuple, List, Dict, Any
 from app.config import get_settings
 from app.services.speaker_model import speaker_model
 from app.services.embedding_utils import combine_embeddings, validate_embedding
+from app.services.audio_validator import audio_validator
 
 
 class VoiceService:
@@ -216,6 +217,11 @@ class VoiceService:
             if self._get_embedding_path(user_id).exists():
                 return False, f"User '{user_id}' is already enrolled. Delete existing enrollment first.", True, 0, 0
             
+            # Validate audio quality and speech presence
+            validation_result = audio_validator.validate_audio_bytes(audio_bytes)
+            if not validation_result.is_valid:
+                return False, validation_result.error_message, False, 0, 0
+            
             # Extract embedding from audio
             embedding = speaker_model.encode_audio(audio_bytes)
             
@@ -268,6 +274,11 @@ class VoiceService:
                     required = metadata.get("samples_required", self.settings.min_enrollment_samples)
                     return False, 0.0, f"User '{user_id}' enrollment is incomplete ({collected}/{required} samples)"
                 return False, 0.0, f"User '{user_id}' is not enrolled"
+            
+            # Validate audio quality and speech presence
+            validation_result = audio_validator.validate_audio_bytes(audio_bytes)
+            if not validation_result.is_valid:
+                return False, 0.0, validation_result.error_message
             
             # Load enrolled embedding (works for both legacy and multi-sample format)
             data = torch.load(embedding_path, weights_only=False)

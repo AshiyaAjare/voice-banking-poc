@@ -25,7 +25,15 @@ class Settings(BaseSettings):
     enrollment_timeout_hours: int = 24  # Auto-expire pending enrollments
     
     # Verification Settings
-    similarity_threshold: float = 0.25
+    similarity_threshold: float = 0.80
+    
+    # VAD (Voice Activity Detection) Settings
+    vad_min_speech_duration_ms: int = 500     # Min speech required (ms)
+    vad_min_speech_percentage: float = 0.10   # Min 10% of audio must be speech
+    vad_threshold: float = 0.5                # Silero VAD probability threshold
+    
+    # Audio Quality Settings
+    min_audio_rms: float = 0.01               # Min RMS energy (quiet audio rejection)
     
     class Config:
         env_file = ".env"
