@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field
 
 
@@ -24,12 +24,17 @@ class EnrollmentResponse(BaseModel):
 
 
 class VerificationResponse(BaseModel):
-    """Response for voice verification."""
+    """Response for voice verification with dual model comparison."""
     matched: bool
-    score: float = Field(..., description="Similarity score between embeddings")
+    score: float = Field(..., description="Primary model similarity score")
     threshold: float = Field(..., description="Threshold used for matching")
     user_id: str
     message: str
+    # Dual model comparison fields
+    primary_model: str = Field("ECAPA-TDNN", description="Primary model name")
+    primary_score: float = Field(..., description="Primary model (ECAPA-TDNN) score")
+    secondary_model: Optional[str] = Field(None, description="Secondary model name")
+    secondary_score: Optional[float] = Field(None, description="Secondary model (X-Vector) score")
 
 
 class UserEnrollmentStatus(BaseModel):
@@ -70,7 +75,106 @@ class CancelEnrollmentResponse(BaseModel):
     )
 
 
+class ConfigResponse(BaseModel):
+    """Configuration settings exposed to frontend."""
+    min_enrollment_samples: int = Field(..., description="Minimum samples required for enrollment")
+    max_enrollment_samples: int = Field(..., description="Maximum samples allowed for enrollment")
+    enable_secondary_model: bool = Field(..., description="Whether dual model comparison is enabled")
+    primary_model_name: str = Field("ECAPA-TDNN", description="Primary model name")
+    secondary_model_name: Optional[str] = Field(None, description="Secondary model name if enabled")
+    similarity_threshold: float = Field(..., description="Similarity threshold for verification")
+
+
 class ErrorResponse(BaseModel):
     """Standard error response."""
     detail: str
 
+
+# ---------------------------------------------------------
+# Accent-Aware Enrollment & Verification Schemas
+# ---------------------------------------------------------
+
+class StartEnrollmentRequest(BaseModel):
+    """Request to start a multi-language enrollment session."""
+    user_id: str = Field(..., description="Unique identifier for the user")
+    primary_language: str = Field(
+        ..., 
+        description="BCP-47 language tag (e.g., hi-IN)"
+    )
+    secondary_language: str = Field(
+        ..., 
+        description="BCP-47 language tag (e.g., en-IN)"
+    )
+    optional_languages: Optional[List[str]] = Field(
+        default=None,
+        max_length=1,
+        description="Optional additional languages (max 1)"
+    )
+
+
+class StartEnrollmentResponse(BaseModel):
+    """Response for enrollment session initialization."""
+    success: bool
+    user_id: str
+    message: str
+    primary_language: str
+    secondary_language: str
+    optional_languages: Optional[List[str]] = None
+    samples_required_per_language: int
+
+
+class LanguageEnrollmentProgress(BaseModel):
+    """Enrollment progress for a single language."""
+    language_code: str
+    role: str = Field(..., description="primary, secondary, or optional")
+    samples_collected: int
+    samples_required: int
+    is_complete: bool
+
+
+class AccentEnrollmentStatusResponse(BaseModel):
+    """Multi-language enrollment status."""
+    user_id: str
+    primary_language: str
+    secondary_language: str
+    optional_languages: Optional[List[str]] = None
+    languages: List[LanguageEnrollmentProgress]
+    is_fully_enrolled: bool = Field(
+        ..., 
+        description="True if primary + secondary complete"
+    )
+    can_finalize: bool = Field(
+        ..., 
+        description="True if enrollment can be finalized"
+    )
+
+
+class AccentEnrollmentSampleResponse(BaseModel):
+    """Response for adding an enrollment sample."""
+    success: bool
+    user_id: str
+    message: str
+    language: str
+    samples_collected: int
+    samples_required: int
+    language_complete: bool
+    detected_language: Optional[str] = None
+    detection_confidence: Optional[float] = None
+
+
+class AccentVerificationResponse(BaseModel):
+    """Response for accent-aware verification."""
+    matched: bool
+    score: float = Field(..., description="Final fused score")
+    threshold: float
+    user_id: str
+    message: str
+    strategy_used: str
+    detected_language: Optional[str] = None
+    matched_language: Optional[str] = None
+    confidence_level: Optional[str] = None
+    # Dual model scores
+    primary_model: str = Field(default="ECAPA-TDNN", description="Primary model name")
+    primary_score: float = Field(..., description="Primary model (ECAPA-TDNN) score")
+    secondary_model: Optional[str] = Field(None, description="Secondary model name")
+    secondary_score: Optional[float] = Field(None, description="Secondary model score")

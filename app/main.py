@@ -10,10 +10,10 @@ from app.services.speaker_model import speaker_model
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown events."""
-    # Startup: Load the ML model
-    print("🎤 Loading speaker recognition model...")
-    speaker_model.load_model()
-    print("✅ Model loaded successfully!")
+    # Startup: Load the ML models (primary + secondary if enabled)
+    print("🎤 Loading speaker recognition models...")
+    speaker_model.load_models()
+    print("✅ Models loaded successfully!")
     yield
     # Shutdown: Cleanup if needed
     print("👋 Shutting down Voice Banking API")
