@@ -73,7 +73,7 @@ class AccentProfileService:
         self,
         user_id: str,
         primary_language: str,
-        secondary_language: str,
+        secondary_language: Optional[str] = None,
         optional_languages: Optional[List[str]] = None,
     ) -> Dict:
         """
@@ -85,7 +85,7 @@ class AccentProfileService:
         Args:
             user_id: user identifier
             primary_language: BCP-47 tag (e.g., hi-IN)
-            secondary_language: BCP-47 tag (e.g., en-IN)
+            secondary_language: BCP-47 tag (e.g., en-IN) - optional
             optional_languages: list of optional languages (max 1)
 
         Returns:
@@ -206,13 +206,17 @@ class AccentProfileService:
         can_finalize = enrollment_policy.can_finalize_user_enrollment(
             enrollment_statuses=enrollment_statuses_for_policy,
             primary_language=primary_language,
-            secondary_language=secondary_language,
+            secondary_language=secondary_language,  # Can be None
         )
 
-        # 5. Check if fully enrolled (primary + secondary complete)
+        # 5. Check if fully enrolled (primary + secondary if declared complete)
+        required_languages = [primary_language]
+        if secondary_language:
+            required_languages.append(secondary_language)
+        
         is_fully_enrolled = enrollment_policy.is_user_enrollment_complete(
             enrollment_statuses=enrollment_statuses_for_policy,
-            required_languages=[primary_language, secondary_language],
+            required_languages=required_languages,
         )
 
         return {

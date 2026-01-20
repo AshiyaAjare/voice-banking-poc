@@ -101,9 +101,9 @@ class StartEnrollmentRequest(BaseModel):
         ..., 
         description="BCP-47 language tag (e.g., hi-IN)"
     )
-    secondary_language: str = Field(
-        ..., 
-        description="BCP-47 language tag (e.g., en-IN)"
+    secondary_language: Optional[str] = Field(
+        default=None, 
+        description="BCP-47 language tag (e.g., en-IN) - optional"
     )
     optional_languages: Optional[List[str]] = Field(
         default=None,
@@ -118,7 +118,7 @@ class StartEnrollmentResponse(BaseModel):
     user_id: str
     message: str
     primary_language: str
-    secondary_language: str
+    secondary_language: Optional[str] = None
     optional_languages: Optional[List[str]] = None
     samples_required_per_language: int
 
@@ -136,12 +136,12 @@ class AccentEnrollmentStatusResponse(BaseModel):
     """Multi-language enrollment status."""
     user_id: str
     primary_language: str
-    secondary_language: str
+    secondary_language: Optional[str] = None
     optional_languages: Optional[List[str]] = None
     languages: List[LanguageEnrollmentProgress]
     is_fully_enrolled: bool = Field(
         ..., 
-        description="True if primary + secondary complete"
+        description="True if primary (and secondary if declared) complete"
     )
     can_finalize: bool = Field(
         ..., 

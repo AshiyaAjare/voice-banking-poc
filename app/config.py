@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     # Primary Model Settings (ECAPA-TDNN)
     model_source: str = "speechbrain/spkrec-ecapa-voxceleb"
     model_savedir: Path = Path("pretrained_models/spkrec")
+    whisper_model_name: str = "medium"
+    
+    # Speaker Embedding Backend Selection
+    # Options: "ecapa" (default) | "whisper_ecapa"
+    speaker_embedding_backend: str = "ecapa"
     
     # Secondary Model Settings (X-Vector) for comparison
     enable_secondary_model: bool = True

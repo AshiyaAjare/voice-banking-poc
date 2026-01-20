@@ -58,7 +58,7 @@ class LanguageEnrollmentRequest(BaseModel):
     User intent is authoritative.
     """
     primary_language: str
-    secondary_language: str
+    secondary_language: Optional[str] = None
     optional_languages: Optional[List[str]] = Field(
         default=None,
         max_items=1,
@@ -85,7 +85,7 @@ class UserAccentEnrollmentSummary(BaseModel):
     """
     user_id: str
     primary_language: str
-    secondary_language: str
+    secondary_language: Optional[str] = None
 
     enrolled_languages: List[AccentEnrollmentStatus]
 

@@ -1,0 +1,21 @@
+Collecting openai-whisper
+  Using cached openai_whisper-20250625.tar.gz (803 kB)
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Installing backend dependencies: started
+  Installing backend dependencies: finished with status 'done'
+    Preparing wheel metadata: started
+    Preparing wheel metadata: finished with status 'done'
+Requirement already satisfied (use --upgrade to upgrade): unknown from https://files.pythonhosted.org/packages/35/8e/d36f8880bcf18ec026a55807d02fe4c7357da9f25aebd92f85178000c0dc/openai_whisper-20250625.tar.gz#sha256=37a91a3921809d9f44748ffc73c0a55c9f366c85a3ef5c2ae0cc09540432eb96 in /home/josh/.local/lib/python3.8/site-packages
+Building wheels for collected packages: unknown, unknown
+  Building wheel for unknown (PEP 517): started
+  Building wheel for unknown (PEP 517): finished with status 'done'
+  Created wheel for unknown: filename=UNKNOWN-0.0.0-py3-none-any.whl size=1788 sha256=9e9ac4c16db25ee14d28862e747d85009fce3e54467f19487e75df7dda877e44
+  Stored in directory: /home/josh/.cache/pip/wheels/f4/77/08/b9ffbc41b94c68291ca43a1f4db87eb152c35e40291b42972d
+  Building wheel for unknown (PEP 517): started
+  Building wheel for unknown (PEP 517): finished with status 'done'
+  Created wheel for unknown: filename=UNKNOWN-0.0.0-py3-none-any.whl size=1788 sha256=9e9ac4c16db25ee14d28862e747d85009fce3e54467f19487e75df7dda877e44
+  Stored in directory: /tmp/pip-ephem-wheel-cache-kmlabprf/wheels/f8/5f/39/7961fac88047c6165134c36dcf89ee9e1240e678ad001e07c4
+Successfully built unknown unknown

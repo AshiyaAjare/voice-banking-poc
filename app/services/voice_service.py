@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Optional, Tuple, List, Dict, Any
 
 from app.config import get_settings
-from app.services.speaker_model import speaker_model
+from app.services.speaker_model_provider import get_speaker_model
 from app.services.embedding_utils import combine_embeddings, combine_dual_embeddings, validate_embedding
 from app.services.audio_validator import audio_validator
 
@@ -25,6 +25,7 @@ class VoiceService:
     
     def __init__(self):
         self.settings = get_settings()
+        self.speaker_model = get_speaker_model()
         self._ensure_storage_dirs()
     
     def _ensure_storage_dirs(self) -> None:
@@ -253,7 +254,7 @@ class VoiceService:
                 return False, validation_result.error_message, False, 0, 0
             
             # Extract embeddings from both models
-            embedding, embedding_secondary = speaker_model.encode_audio_dual(audio_bytes)
+            embedding, embedding_secondary = self.speaker_model.encode_audio_dual(audio_bytes)
             
             if not validate_embedding(embedding):
                 return False, "Failed to extract valid embedding from audio", False, 0, 0
@@ -326,18 +327,18 @@ class VoiceService:
             enrolled_embedding_secondary = data.get("embedding_secondary")  # May be None for legacy
             
             # Extract test embeddings using dual models
-            test_primary, test_secondary = speaker_model.encode_audio_dual(audio_bytes)
+            test_primary, test_secondary = self.speaker_model.encode_audio_dual(audio_bytes)
             
             # Compute primary model similarity (ECAPA-TDNN)
-            primary_score = speaker_model.compute_similarity(enrolled_embedding, test_primary)
+            primary_score = self.speaker_model.compute_similarity(enrolled_embedding, test_primary)
             dual_scores["primary_score"] = primary_score
             
             # Compute secondary model similarity (X-Vector) if available
-            if speaker_model.is_secondary_enabled() and test_secondary is not None:
+            if self.speaker_model.is_secondary_enabled() and test_secondary is not None:
                 dual_scores["secondary_model"] = "X-Vector"
                 if enrolled_embedding_secondary is not None:
                     # Use proper X-Vector embeddings for comparison
-                    secondary_score = speaker_model.compute_similarity_secondary(
+                    secondary_score = self.speaker_model.compute_similarity_secondary(
                         enrolled_embedding_secondary, test_secondary
                     )
                     dual_scores["secondary_score"] = secondary_score

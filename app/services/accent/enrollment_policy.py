@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from app.models.accent import (
     LanguageEnrollmentRequest,
@@ -36,7 +36,8 @@ class EnrollmentPolicy:
         Raises:
             ValueError if selection is invalid
         """
-        if request.primary_language == request.secondary_language:
+        # Only validate secondary language uniqueness if it's provided
+        if request.secondary_language and request.primary_language == request.secondary_language:
             raise ValueError("Primary and secondary languages must be different")
 
         optional = request.optional_languages or []
@@ -49,7 +50,7 @@ class EnrollmentPolicy:
         if request.primary_language in optional:
             raise ValueError("Primary language cannot be optional")
 
-        if request.secondary_language in optional:
+        if request.secondary_language and request.secondary_language in optional:
             raise ValueError("Secondary language cannot be optional")
 
     # -------------------------------------------------
@@ -125,18 +126,22 @@ class EnrollmentPolicy:
         self,
         enrollment_statuses: List[AccentEnrollmentStatus],
         primary_language: str,
-        secondary_language: str,
+        secondary_language: Optional[str] = None,
     ) -> bool:
         """
         Determine whether the user enrollment can be finalized.
 
         User enrollment is considered complete when:
         - Primary language is complete
-        - Secondary language is complete
+        - Secondary language is complete (if declared)
         """
+        required_languages = [primary_language]
+        if secondary_language:
+            required_languages.append(secondary_language)
+        
         return self.is_user_enrollment_complete(
             enrollment_statuses=enrollment_statuses,
-            required_languages=[primary_language, secondary_language],
+            required_languages=required_languages,
         )
 
 
