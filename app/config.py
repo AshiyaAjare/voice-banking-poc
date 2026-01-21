@@ -43,7 +43,10 @@ class Settings(BaseSettings):
     vad_threshold: float = 0.5                # Silero VAD probability threshold
     
     # Audio Quality Settings
-    min_audio_rms: float = 0.01               # Min RMS energy (quiet audio rejection)
+    min_audio_rms: float = 0.01  
+    
+    #XOR Audio Enxryption
+    xor_audio_key: str = "default_placeholder"
     
     # Accent / Multi-language Settings
     accent_schema_version: int = 4

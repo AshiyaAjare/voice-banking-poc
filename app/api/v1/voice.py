@@ -29,9 +29,20 @@ from app.models.schemas import (
 from app.models.accent import VerificationStrategy
 from app.services.voice_service import voice_service
 from app.services.accent.accent_profile_service import accent_profile_service
+from app.core.crypto.xor_cipher import XORCipher
+
 
 
 router = APIRouter(prefix="/voice", tags=["Voice Authentication"])
+
+# Helper method for decryption
+def decrypt_audio_bytes(encrypted_bytes: bytes) -> bytes:
+    """
+    Decrypt XOR-encrypted audio bytes at API boundary.
+    """
+    settings = get_settings()
+    cipher = XORCipher(settings.xor_audio_key)
+    return cipher.apply(encrypted_bytes)
 
 
 # ===========================================================
@@ -121,6 +132,7 @@ async def add_enrollment_sample(
     """
     # Read audio bytes
     audio_bytes = await audio.read()
+    audio_bytes = decrypt_audio_bytes(audio_bytes)
     
     if len(audio_bytes) == 0:
         raise HTTPException(
@@ -226,6 +238,7 @@ async def accent_verify(
     
     # Read audio bytes
     audio_bytes = await audio.read()
+    audio_bytes = decrypt_audio_bytes(audio_bytes)
     
     if len(audio_bytes) == 0:
         raise HTTPException(
@@ -304,6 +317,7 @@ async def enroll_voice(
     
     # Read audio bytes
     audio_bytes = await audio.read()
+    audio_bytes = decrypt_audio_bytes(audio_bytes)
     
     if len(audio_bytes) == 0:
         raise HTTPException(
@@ -390,6 +404,7 @@ async def verify_voice(
     
     # Read audio bytes
     audio_bytes = await audio.read()
+    audio_bytes = decrypt_audio_bytes(audio_bytes)
     
     if len(audio_bytes) == 0:
         raise HTTPException(
