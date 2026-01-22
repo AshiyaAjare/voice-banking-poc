@@ -66,9 +66,9 @@ async def get_config():
     return ConfigResponse(
         min_enrollment_samples=settings.min_enrollment_samples,
         max_enrollment_samples=settings.max_enrollment_samples,
-        enable_secondary_model=settings.enable_secondary_model,
+        enable_secondary_model=False,
         primary_model_name="ECAPA-TDNN",
-        secondary_model_name="X-Vector" if settings.enable_secondary_model else None,
+        secondary_model_name=None,
         similarity_threshold=settings.similarity_threshold
     )
 
@@ -283,7 +283,7 @@ async def accent_verify(
         confidence_level=decision.confidence_level if decision else None,
         primary_model="ECAPA-TDNN",
         primary_score=dual_scores.get("primary_score", score),
-        secondary_model="X-Vector" if settings.enable_secondary_model else None,
+        secondary_model=None,
         secondary_score=dual_scores.get("secondary_score"),
     )
 

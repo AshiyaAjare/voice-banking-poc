@@ -32,9 +32,9 @@ class VerificationResponse(BaseModel):
     message: str
     # Dual model comparison fields
     primary_model: str = Field("ECAPA-TDNN", description="Primary model name")
-    primary_score: float = Field(..., description="Primary model (ECAPA-TDNN) score")
-    secondary_model: Optional[str] = Field(None, description="Secondary model name")
-    secondary_score: Optional[float] = Field(None, description="Secondary model (X-Vector) score")
+    primary_score: float = Field(..., description="ECAPA-TDNN score")
+    secondary_model: Optional[str] = Field(None, description="Deprecated")
+    secondary_score: Optional[float] = Field(None, description="Deprecated")
 
 
 class UserEnrollmentStatus(BaseModel):
@@ -79,9 +79,9 @@ class ConfigResponse(BaseModel):
     """Configuration settings exposed to frontend."""
     min_enrollment_samples: int = Field(..., description="Minimum samples required for enrollment")
     max_enrollment_samples: int = Field(..., description="Maximum samples allowed for enrollment")
-    enable_secondary_model: bool = Field(..., description="Whether dual model comparison is enabled")
+    enable_secondary_model: bool = Field(False, description="Deprecated")
     primary_model_name: str = Field("ECAPA-TDNN", description="Primary model name")
-    secondary_model_name: Optional[str] = Field(None, description="Secondary model name if enabled")
+    secondary_model_name: Optional[str] = Field(None, description="Deprecated")
     similarity_threshold: float = Field(..., description="Similarity threshold for verification")
 
 
@@ -175,6 +175,6 @@ class AccentVerificationResponse(BaseModel):
     confidence_level: Optional[str] = None
     # Dual model scores
     primary_model: str = Field(default="ECAPA-TDNN", description="Primary model name")
-    primary_score: float = Field(..., description="Primary model (ECAPA-TDNN) score")
-    secondary_model: Optional[str] = Field(None, description="Secondary model name")
-    secondary_score: Optional[float] = Field(None, description="Secondary model score")
+    primary_score: float = Field(..., description="ECAPA-TDNN score")
+    secondary_model: Optional[str] = Field(None, description="Deprecated")
+    secondary_score: Optional[float] = Field(None, description="Deprecated")

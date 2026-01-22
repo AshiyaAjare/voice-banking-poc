@@ -4,6 +4,7 @@ from app.models.accent import (
     VerificationStrategy,
     AccentVerificationDecision,
 )
+from app.config import get_settings
 
 
 class VerificationPolicy:
@@ -16,15 +17,10 @@ class VerificationPolicy:
 
     def __init__(
         self,
-        primary_threshold: float = 0.70,
-        secondary_threshold: float = 0.65,
-        fusion_weight_primary: float = 0.7,
-        fusion_weight_secondary: float = 0.3,
+        primary_threshold: Optional[float] = None,
     ):
-        self.primary_threshold = primary_threshold
-        self.secondary_threshold = secondary_threshold
-        self.fusion_weight_primary = fusion_weight_primary
-        self.fusion_weight_secondary = fusion_weight_secondary
+        settings = get_settings()
+        self.primary_threshold = primary_threshold if primary_threshold is not None else settings.similarity_threshold
 
     # -------------------------------------------------
     # Score fusion
@@ -36,15 +32,9 @@ class VerificationPolicy:
         secondary_score: Optional[float] = None,
     ) -> float:
         """
-        Fuse ECAPA and X-Vector scores into a final score.
+        Returns the primary score (X-Vector fusion removed).
         """
-        if secondary_score is None:
-            return primary_score
-
-        return (
-            self.fusion_weight_primary * primary_score
-            + self.fusion_weight_secondary * secondary_score
-        )
+        return primary_score
 
     # -------------------------------------------------
     # Decision rules
@@ -58,9 +48,6 @@ class VerificationPolicy:
         """
         Determine whether a final score constitutes a match.
         """
-        if strategy == VerificationStrategy.DUAL_MODEL_FUSION:
-            return final_score >= self.secondary_threshold
-
         return final_score >= self.primary_threshold
 
     # -------------------------------------------------
@@ -71,12 +58,11 @@ class VerificationPolicy:
         self,
         language_code: str,
         primary_score: float,
-        secondary_score: Optional[float] = None,
     ) -> AccentVerificationDecision:
         """
         Accent-matched verification decision.
         """
-        final_score = self.fuse_scores(primary_score, secondary_score)
+        final_score = self.fuse_scores(primary_score)
         matched = self.is_match(final_score, VerificationStrategy.ACCENT_MATCHED)
 
         return AccentVerificationDecision(
@@ -88,13 +74,13 @@ class VerificationPolicy:
 
     def decide_declared_language_fallback(
         self,
-        language_scores: Dict[str, Tuple[float, Optional[float]]],
+        language_scores: Dict[str, float],
     ) -> AccentVerificationDecision:
         """
         Try declared languages (primary → secondary → optional).
         """
-        for language, (primary, secondary) in language_scores.items():
-            final_score = self.fuse_scores(primary, secondary)
+        for language, primary in language_scores.items():
+            final_score = self.fuse_scores(primary)
             if self.is_match(final_score, VerificationStrategy.DECLARED_LANGUAGE_FALLBACK):
                 return AccentVerificationDecision(
                     matched=True,
@@ -112,7 +98,7 @@ class VerificationPolicy:
 
     def decide_best_of_all(
         self,
-        language_scores: Dict[str, Tuple[float, Optional[float]]],
+        language_scores: Dict[str, float],
     ) -> AccentVerificationDecision:
         """
         Best-of-all strategy across all enrolled language profiles.
@@ -120,8 +106,8 @@ class VerificationPolicy:
         best_language: Optional[str] = None
         best_score: float = -1.0
 
-        for language, (primary, secondary) in language_scores.items():
-            final_score = self.fuse_scores(primary, secondary)
+        for language, primary in language_scores.items():
+            final_score = self.fuse_scores(primary)
             if final_score > best_score:
                 best_score = final_score
                 best_language = language

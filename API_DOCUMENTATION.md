@@ -10,6 +10,7 @@ The Voice-Print Backend provides a robust API for capturing, storing, and verify
 
 - **Dual Model Comparison**: Utilizes both ECAPA-TDNN and X-Vector models for higher accuracy.
 - **Accent-Aware**: Supports multiple language buckets (Hindi, English, Marathi, etc.) for a single user.
+- **Intelligent Routing**: Uses SpeechBrain LID to automatically select or prioritize language buckets.
 - **Backward Compatible**: Maintains legacy endpoints for existing integrations.
 
 ---

@@ -5,7 +5,7 @@ import json
 
 from app.config import get_settings
 from app.services.voice_service import voice_service
-from app.services.accent.accent_detection_service import accent_detection_service
+from app.services.language.language_detection_service import language_detection_service
 from app.services.accent.enrollment_policy import enrollment_policy
 from app.services.accent.verification_policy import verification_policy
 
@@ -283,8 +283,16 @@ class AccentProfileService:
                 "detection_confidence": None,
             }
 
-        # 3. Advisory accent detection (non-blocking)
-        detection_result = accent_detection_service.detect_accent(audio_bytes)
+        # 3. Advisory language detection (non-blocking, control-plane only)
+        # Load audio for LID
+        import io
+        import torchaudio
+        audio_buffer = io.BytesIO(audio_bytes)
+        waveform, sample_rate = torchaudio.load(audio_buffer)
+        
+        detection_result = language_detection_service.detect_language(waveform, sample_rate)
+        
+        print(f"[LID] enrollment_user={user_id} detected={detection_result.language} confidence={detection_result.confidence:.2f}")
 
         # NOTE:
         # User-declared language is authoritative.
@@ -310,7 +318,7 @@ class AccentProfileService:
             "samples_collected": collected,
             "samples_required": required,
             "completed": completed,
-            "detected_language": detection_result.detected_language,
+            "detected_language": detection_result.language,
             "detection_confidence": detection_result.confidence,
         }
 
@@ -369,12 +377,18 @@ class AccentProfileService:
                 "detected_language": None,
             }
 
-        # 3. Detect accent (advisory)
-        detection = accent_detection_service.detect_accent(audio_bytes)
-        detected_language = detection.detected_language
+        # 3. Detect language (advisory, control-plane only)
+        import io
+        import torchaudio
+        audio_buffer = io.BytesIO(audio_bytes)
+        waveform, sample_rate = torchaudio.load(audio_buffer)
+        
+        detection = language_detection_service.detect_language(waveform, sample_rate)
+        detected_language = detection.language
+        
+        print(f"[LID] verify_user={user_id} detected={detected_language} confidence={detection.confidence:.2f}")
 
-        language_scores: Dict[str, Tuple[float, Optional[float]]] = {}
-        best_dual_scores: Dict = {}
+        language_scores: Dict[str, float] = {}
 
         # 4. Strategy: Accent-matched first
         if (
@@ -391,8 +405,9 @@ class AccentProfileService:
             decision = verification_policy.decide_accent_matched(
                 language_code=detected_language,
                 primary_score=dual_scores["primary_score"],
-                secondary_score=dual_scores.get("secondary_score"),
             )
+
+            print(f"[ECAPA] bucket={detected_language} score={dual_scores['primary_score']:.2f} → {'ACCEPT' if decision.matched else 'REJECT'}")
 
             return decision.matched, score, {
                 "success": True,
@@ -403,8 +418,16 @@ class AccentProfileService:
                 "dual_scores": dual_scores,
             }
 
-        # 5. Fallback: try all enrolled languages
-        for language in enrolled_languages.keys():
+        # 5. Fallback: try all enrolled languages (prioritize detected language)
+        fallback_languages = list(enrolled_languages.keys())
+        if detected_language in fallback_languages:
+            fallback_languages.remove(detected_language)
+            fallback_languages.insert(0, detected_language)
+
+        # Initialize best_dual_scores for tracking
+        best_dual_scores = None
+
+        for language in fallback_languages:
             scoped_user_id = f"{user_id}:{language}"
 
             try:
@@ -413,14 +436,13 @@ class AccentProfileService:
                     audio_bytes,
                 )
 
-                language_scores[language] = (
-                    dual_scores["primary_score"],
-                    dual_scores.get("secondary_score"),
-                )
+                language_scores[language] = dual_scores["primary_score"]
                 
                 # Track best scores for response
                 if not best_dual_scores or dual_scores["primary_score"] > best_dual_scores.get("primary_score", 0):
                     best_dual_scores = dual_scores
+                
+                print(f"[ECAPA] bucket={language} score={dual_scores['primary_score']:.2f} (fallback loop)")
             except Exception:
                 # Skip languages that fail verification
                 continue
@@ -443,8 +465,8 @@ class AccentProfileService:
         # Calculate final score from decision
         final_score = 0.0
         if decision.language_used and decision.language_used in language_scores:
-            primary, secondary = language_scores[decision.language_used]
-            final_score = verification_policy.fuse_scores(primary, secondary)
+            primary = language_scores[decision.language_used]
+            final_score = verification_policy.fuse_scores(primary)
 
         return decision.matched, final_score, {
             "success": True,

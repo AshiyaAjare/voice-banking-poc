@@ -14,16 +14,6 @@ class Settings(BaseSettings):
     # Primary Model Settings (ECAPA-TDNN)
     model_source: str = "speechbrain/spkrec-ecapa-voxceleb"
     model_savedir: Path = Path("pretrained_models/spkrec")
-    whisper_model_name: str = "medium"
-    
-    # Speaker Embedding Backend Selection
-    # Options: "ecapa" (default) | "whisper_ecapa"
-    speaker_embedding_backend: str = "ecapa"
-    
-    # Secondary Model Settings (X-Vector) for comparison
-    enable_secondary_model: bool = True
-    secondary_model_source: str = "speechbrain/spkrec-xvect-voxceleb"
-    secondary_model_savedir: Path = Path("pretrained_models/xvect")
     
     # Storage Settings
     embeddings_dir: Path = Path("storage/embeddings")
@@ -59,6 +49,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"
 
 
 @lru_cache

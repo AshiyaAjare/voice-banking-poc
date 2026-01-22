@@ -13,7 +13,7 @@ from typing import Optional, Tuple, List, Dict, Any
 
 from app.config import get_settings
 from app.services.speaker_model_provider import get_speaker_model
-from app.services.embedding_utils import combine_embeddings, combine_dual_embeddings, validate_embedding
+from app.services.embedding_utils import combine_embeddings, validate_embedding
 from app.services.audio_validator import audio_validator
 
 
@@ -78,42 +78,31 @@ class VoiceService:
         }
         self._save_pending_metadata(user_id, metadata)
         return metadata
-    
     def _add_pending_sample(
         self, 
         user_id: str, 
-        embedding: torch.Tensor,
-        embedding_secondary: Optional[torch.Tensor] = None
+        embedding: torch.Tensor
     ) -> Tuple[int, int]:
         """
-        Add a sample to pending enrollment.
-        
-        Args:
-            user_id: Unique identifier for the user
-            embedding: Primary model embedding (ECAPA-TDNN)
-            embedding_secondary: Secondary model embedding (X-Vector), optional
+        Add a voice sample to a user's pending enrollment.
         
         Returns:
             Tuple of (samples_collected, samples_required)
         """
+        # Load or create pending enrollment
         metadata = self._load_pending_metadata(user_id)
         if metadata is None:
             metadata = self._create_pending_enrollment(user_id)
-        
-        # Increment sample count
+            
         sample_index = metadata["samples_collected"] + 1
         sample_filename = f"sample_{sample_index}.pt"
         sample_path = self._get_pending_dir(user_id) / sample_filename
         
-        # Save the sample embeddings (both primary and secondary)
+        # Save sample data
         sample_data = {
             "embedding": embedding,
-            "collected_at": datetime.utcnow().isoformat(),
-            "sample_index": sample_index
+            "collected_at": datetime.utcnow().isoformat()
         }
-        if embedding_secondary is not None:
-            sample_data["embedding_secondary"] = embedding_secondary
-        
         torch.save(sample_data, sample_path)
         
         # Update metadata
@@ -126,20 +115,18 @@ class VoiceService:
     def _load_pending_embeddings(
         self, 
         user_id: str
-    ) -> Tuple[List[torch.Tensor], List[Optional[torch.Tensor]]]:
+    ) -> List[torch.Tensor]:
         """
         Load all pending embeddings for a user.
         
         Returns:
-            Tuple of (primary_embeddings, secondary_embeddings)
-            Secondary embeddings may contain None values if not available for a sample
+            List of primary embeddings
         """
         metadata = self._load_pending_metadata(user_id)
         if metadata is None:
-            return [], []
+            return []
         
         primary_embeddings = []
-        secondary_embeddings = []
         pending_dir = self._get_pending_dir(user_id)
         
         for sample_file in metadata["sample_files"]:
@@ -147,9 +134,8 @@ class VoiceService:
             if sample_path.exists():
                 data = torch.load(sample_path, weights_only=False)
                 primary_embeddings.append(data["embedding"])
-                secondary_embeddings.append(data.get("embedding_secondary"))
         
-        return primary_embeddings, secondary_embeddings
+        return primary_embeddings
     
     def _finalize_enrollment(self, user_id: str) -> Tuple[bool, str]:
         """
@@ -164,17 +150,14 @@ class VoiceService:
         if metadata is None:
             return False, "No pending enrollment found"
         
-        # Load all pending embeddings (both primary and secondary)
-        primary_embeddings, secondary_embeddings = self._load_pending_embeddings(user_id)
+        # Load all pending embeddings
+        primary_embeddings = self._load_pending_embeddings(user_id)
         if len(primary_embeddings) < self.settings.min_enrollment_samples:
             return False, f"Not enough samples: {len(primary_embeddings)}/{self.settings.min_enrollment_samples}"
         
         try:
-            # Combine embeddings into dual centroids
-            centroid, centroid_secondary = combine_dual_embeddings(
-                primary_embeddings, 
-                secondary_embeddings
-            )
+            # Combine embeddings into centroid
+            centroid = combine_embeddings(primary_embeddings)
             
             # Get sample timestamps
             sample_timestamps = []
@@ -185,7 +168,7 @@ class VoiceService:
                     data = torch.load(sample_path, weights_only=False)
                     sample_timestamps.append(data.get("collected_at", ""))
             
-            # Save the finalized profile with both embeddings
+            # Save the finalized profile
             embedding_path = self._get_embedding_path(user_id)
             profile_data = {
                 "embedding": centroid,
@@ -194,8 +177,6 @@ class VoiceService:
                 "sample_count": len(primary_embeddings),
                 "sample_timestamps": sample_timestamps
             }
-            if centroid_secondary is not None:
-                profile_data["embedding_secondary"] = centroid_secondary
             
             torch.save(profile_data, embedding_path)
             
@@ -253,15 +234,15 @@ class VoiceService:
             if not validation_result.is_valid:
                 return False, validation_result.error_message, False, 0, 0
             
-            # Extract embeddings from both models
-            embedding, embedding_secondary = self.speaker_model.encode_audio_dual(audio_bytes)
+            # Extract embeddings
+            embedding = self.speaker_model.encode_audio(audio_bytes)
             
             if not validate_embedding(embedding):
                 return False, "Failed to extract valid embedding from audio", False, 0, 0
             
-            # Add to pending samples (with both embeddings)
+            # Add to pending samples
             samples_collected, samples_required = self._add_pending_sample(
-                user_id, embedding, embedding_secondary
+                user_id, embedding
             )
             
             # Check if we have enough samples to finalize
@@ -321,30 +302,16 @@ class VoiceService:
             if not validation_result.is_valid:
                 return False, 0.0, validation_result.error_message, dual_scores
             
-            # Load enrolled embeddings (supports both legacy and dual-model format)
+            # Load enrolled embedding
             data = torch.load(embedding_path, weights_only=False)
             enrolled_embedding = data["embedding"]
-            enrolled_embedding_secondary = data.get("embedding_secondary")  # May be None for legacy
             
-            # Extract test embeddings using dual models
-            test_primary, test_secondary = self.speaker_model.encode_audio_dual(audio_bytes)
+            # Extract test embedding
+            test_primary = self.speaker_model.encode_audio(audio_bytes)
             
-            # Compute primary model similarity (ECAPA-TDNN)
+            # Compute similarity
             primary_score = self.speaker_model.compute_similarity(enrolled_embedding, test_primary)
             dual_scores["primary_score"] = primary_score
-            
-            # Compute secondary model similarity (X-Vector) if available
-            if self.speaker_model.is_secondary_enabled() and test_secondary is not None:
-                dual_scores["secondary_model"] = "X-Vector"
-                if enrolled_embedding_secondary is not None:
-                    # Use proper X-Vector embeddings for comparison
-                    secondary_score = self.speaker_model.compute_similarity_secondary(
-                        enrolled_embedding_secondary, test_secondary
-                    )
-                    dual_scores["secondary_score"] = secondary_score
-                else:
-                    # Legacy profile without X-Vector embedding - indicate not available
-                    dual_scores["secondary_score"] = None
             
             # Make decision based on primary model score
             score = primary_score

@@ -84,28 +84,3 @@ def validate_embedding(embedding: torch.Tensor) -> bool:
     return True
 
 
-def combine_dual_embeddings(
-    primary_embeddings: List[torch.Tensor],
-    secondary_embeddings: Optional[List[torch.Tensor]] = None
-) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-    """
-    Combine embeddings from both models into separate centroids.
-    
-    Args:
-        primary_embeddings: List of primary model embeddings (ECAPA-TDNN)
-        secondary_embeddings: List of secondary model embeddings (X-Vector), optional
-        
-    Returns:
-        Tuple of (primary_centroid, secondary_centroid)
-        Secondary will be None if no secondary embeddings provided
-    """
-    primary_centroid = combine_embeddings(primary_embeddings)
-    
-    secondary_centroid = None
-    if secondary_embeddings and len(secondary_embeddings) > 0:
-        # Filter out None values
-        valid_secondary = [e for e in secondary_embeddings if e is not None]
-        if valid_secondary:
-            secondary_centroid = combine_embeddings(valid_secondary)
-    
-    return primary_centroid, secondary_centroid

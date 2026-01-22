@@ -13,22 +13,14 @@ from app.config import get_settings
 
 if TYPE_CHECKING:
     from app.services.speaker_model import SpeakerModel
-    from app.services.whisper_ecapa_model import WhisperECAPASpeakerModel
 
 
-def get_speaker_model() -> "SpeakerModel | WhisperECAPASpeakerModel":
+def get_speaker_model() -> "SpeakerModel":
     """
-    Get the active speaker model based on configuration.
+    Get the active speaker model.
 
     Returns:
-        SpeakerModel or WhisperECAPASpeakerModel instance
+        SpeakerModel instance
     """
-    settings = get_settings()
-
-    if settings.speaker_embedding_backend == "whisper_ecapa":
-        from app.services.whisper_ecapa_model import whisper_ecapa_speaker_model
-        return whisper_ecapa_speaker_model
-    else:
-        # Default: standard ECAPA-TDNN + X-Vector
-        from app.services.speaker_model import speaker_model
-        return speaker_model
+    from app.services.speaker_model import speaker_model
+    return speaker_model
