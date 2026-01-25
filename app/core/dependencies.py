@@ -1,5 +1,5 @@
 from app.config import get_settings
-from app.services.speaker_model_provider import get_speaker_model as _get_speaker_model
+from app.services.speaker_models.speaker_model_provider import get_speaker_model as _get_speaker_model
 
 
 

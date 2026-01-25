@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Optional, Tuple, List, Dict, Any
 
 from app.config import get_settings
-from app.services.speaker_model_provider import get_speaker_model
+from app.services.speaker_models.speaker_model_provider import get_speaker_model
 from app.services.embedding_utils import combine_embeddings, validate_embedding
 from app.services.audio_validator import audio_validator
 
@@ -81,10 +81,16 @@ class VoiceService:
     def _add_pending_sample(
         self, 
         user_id: str, 
-        embedding: torch.Tensor
+        embedding: torch.Tensor,
+        wespeaker_embedding: Optional[torch.Tensor] = None
     ) -> Tuple[int, int]:
         """
         Add a voice sample to a user's pending enrollment.
+        
+        Args:
+            user_id: User identifier
+            embedding: ECAPA-TDNN embedding
+            wespeaker_embedding: Optional WeSpeaker embedding for comparison
         
         Returns:
             Tuple of (samples_collected, samples_required)
@@ -98,9 +104,10 @@ class VoiceService:
         sample_filename = f"sample_{sample_index}.pt"
         sample_path = self._get_pending_dir(user_id) / sample_filename
         
-        # Save sample data
+        # Save sample data with both embeddings
         sample_data = {
             "embedding": embedding,
+            "wespeaker_embedding": wespeaker_embedding,
             "collected_at": datetime.utcnow().isoformat()
         }
         torch.save(sample_data, sample_path)
@@ -115,18 +122,19 @@ class VoiceService:
     def _load_pending_embeddings(
         self, 
         user_id: str
-    ) -> List[torch.Tensor]:
+    ) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
         """
         Load all pending embeddings for a user.
         
         Returns:
-            List of primary embeddings
+            Tuple of (ECAPA embeddings list, WeSpeaker embeddings list)
         """
         metadata = self._load_pending_metadata(user_id)
         if metadata is None:
-            return []
+            return [], []
         
         primary_embeddings = []
+        wespeaker_embeddings = []
         pending_dir = self._get_pending_dir(user_id)
         
         for sample_file in metadata["sample_files"]:
@@ -134,14 +142,16 @@ class VoiceService:
             if sample_path.exists():
                 data = torch.load(sample_path, weights_only=False)
                 primary_embeddings.append(data["embedding"])
+                if data.get("wespeaker_embedding") is not None:
+                    wespeaker_embeddings.append(data["wespeaker_embedding"])
         
-        return primary_embeddings
+        return primary_embeddings, wespeaker_embeddings
     
     def _finalize_enrollment(self, user_id: str) -> Tuple[bool, str]:
         """
-        Finalize enrollment by combining pending samples into dual centroids.
+        Finalize enrollment by combining pending samples into centroids.
         
-        Creates separate centroids for ECAPA-TDNN and X-Vector models.
+        Creates separate centroids for ECAPA-TDNN and WeSpeaker models.
         
         Returns:
             Tuple of (success, message)
@@ -151,13 +161,18 @@ class VoiceService:
             return False, "No pending enrollment found"
         
         # Load all pending embeddings
-        primary_embeddings = self._load_pending_embeddings(user_id)
+        primary_embeddings, wespeaker_embeddings = self._load_pending_embeddings(user_id)
         if len(primary_embeddings) < self.settings.min_enrollment_samples:
             return False, f"Not enough samples: {len(primary_embeddings)}/{self.settings.min_enrollment_samples}"
         
         try:
-            # Combine embeddings into centroid
+            # Combine ECAPA embeddings into centroid
             centroid = combine_embeddings(primary_embeddings)
+            
+            # Combine WeSpeaker embeddings into centroid if available
+            wespeaker_centroid = None
+            if wespeaker_embeddings and len(wespeaker_embeddings) == len(primary_embeddings):
+                wespeaker_centroid = combine_embeddings(wespeaker_embeddings)
             
             # Get sample timestamps
             sample_timestamps = []
@@ -168,10 +183,11 @@ class VoiceService:
                     data = torch.load(sample_path, weights_only=False)
                     sample_timestamps.append(data.get("collected_at", ""))
             
-            # Save the finalized profile
+            # Save the finalized profile with both embeddings
             embedding_path = self._get_embedding_path(user_id)
             profile_data = {
                 "embedding": centroid,
+                "wespeaker_embedding": wespeaker_centroid,
                 "created_at": datetime.utcnow().isoformat(),
                 "version": self.SCHEMA_VERSION,
                 "sample_count": len(primary_embeddings),
@@ -234,15 +250,15 @@ class VoiceService:
             if not validation_result.is_valid:
                 return False, validation_result.error_message, False, 0, 0
             
-            # Extract embeddings
-            embedding = self.speaker_model.encode_audio(audio_bytes)
+            # Extract embeddings from both models (parallel computation)
+            embedding, wespeaker_embedding = self.speaker_model.encode_audio_dual(audio_bytes)
             
             if not validate_embedding(embedding):
                 return False, "Failed to extract valid embedding from audio", False, 0, 0
             
             # Add to pending samples
             samples_collected, samples_required = self._add_pending_sample(
-                user_id, embedding
+                user_id, embedding, wespeaker_embedding
             )
             
             # Check if we have enough samples to finalize
@@ -281,8 +297,8 @@ class VoiceService:
         dual_scores = {
             "primary_model": "ECAPA-TDNN",
             "primary_score": 0.0,
-            "secondary_model": None,
-            "secondary_score": None
+            "wespeaker_model": None,
+            "wespeaker_score": None
         }
         
         try:
@@ -305,15 +321,25 @@ class VoiceService:
             # Load enrolled embedding
             data = torch.load(embedding_path, weights_only=False)
             enrolled_embedding = data["embedding"]
+            enrolled_wespeaker = data.get("wespeaker_embedding")
             
-            # Extract test embedding
-            test_primary = self.speaker_model.encode_audio(audio_bytes)
+            # Extract test embeddings from both models (parallel computation)
+            test_primary, test_wespeaker = self.speaker_model.encode_audio_dual(audio_bytes)
             
-            # Compute similarity
+            # Compute ECAPA-TDNN similarity
             primary_score = self.speaker_model.compute_similarity(enrolled_embedding, test_primary)
             dual_scores["primary_score"] = primary_score
             
-            # Make decision based on primary model score
+            # Compute WeSpeaker similarity if available
+            if enrolled_wespeaker is not None and test_wespeaker is not None:
+                wespeaker_score = self.speaker_model.compute_similarity_wespeaker(
+                    enrolled_wespeaker, test_wespeaker
+                )
+                if wespeaker_score is not None:
+                    dual_scores["wespeaker_model"] = "WeSpeaker"
+                    dual_scores["wespeaker_score"] = wespeaker_score
+            
+            # Make decision based on primary model score only
             score = primary_score
             matched = score >= self.settings.similarity_threshold
             

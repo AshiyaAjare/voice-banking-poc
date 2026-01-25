@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.api.router import api_router
-from app.services.speaker_model_provider import get_speaker_model
+from app.services.speaker_models.speaker_model_provider import get_speaker_model
 
 
 

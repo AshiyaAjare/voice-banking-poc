@@ -35,6 +35,9 @@ class VerificationResponse(BaseModel):
     primary_score: float = Field(..., description="ECAPA-TDNN score")
     secondary_model: Optional[str] = Field(None, description="Deprecated")
     secondary_score: Optional[float] = Field(None, description="Deprecated")
+    # WeSpeaker comparison fields
+    wespeaker_model: Optional[str] = Field(None, description="WeSpeaker model name for A/B comparison")
+    wespeaker_score: Optional[float] = Field(None, description="WeSpeaker similarity score for comparison")
 
 
 class UserEnrollmentStatus(BaseModel):
@@ -83,6 +86,7 @@ class ConfigResponse(BaseModel):
     primary_model_name: str = Field("ECAPA-TDNN", description="Primary model name")
     secondary_model_name: Optional[str] = Field(None, description="Deprecated")
     similarity_threshold: float = Field(..., description="Similarity threshold for verification")
+    enable_wespeaker_comparison: bool = Field(False, description="WeSpeaker A/B comparison enabled")
 
 
 class ErrorResponse(BaseModel):
@@ -178,3 +182,6 @@ class AccentVerificationResponse(BaseModel):
     primary_score: float = Field(..., description="ECAPA-TDNN score")
     secondary_model: Optional[str] = Field(None, description="Deprecated")
     secondary_score: Optional[float] = Field(None, description="Deprecated")
+    # WeSpeaker comparison
+    wespeaker_model: Optional[str] = Field(None, description="WeSpeaker model name for A/B comparison")
+    wespeaker_score: Optional[float] = Field(None, description="WeSpeaker similarity score for comparison")

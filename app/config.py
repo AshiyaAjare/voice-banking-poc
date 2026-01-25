@@ -45,6 +45,11 @@ class Settings(BaseSettings):
         "en-IN", "hi-IN", "mr-IN", "ta-IN", "te-IN", 
         "kn-IN", "ml-IN", "gu-IN", "pa-IN", "bn-IN"
     ]
+
+    # WeSpeaker Model Settings
+    # Model directory must contain config.yaml and avg_model.pt
+    wespeaker_model_dir: Path = Path("pretrained_models/wespeaker")
+    enable_wespeaker_comparison: bool = True  # Enable WeSpeaker for A/B comparison
     
     class Config:
         env_file = ".env"

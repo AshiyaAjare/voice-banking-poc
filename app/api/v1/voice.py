@@ -69,7 +69,8 @@ async def get_config():
         enable_secondary_model=False,
         primary_model_name="ECAPA-TDNN",
         secondary_model_name=None,
-        similarity_threshold=settings.similarity_threshold
+        similarity_threshold=settings.similarity_threshold,
+        enable_wespeaker_comparison=settings.enable_wespeaker_comparison
     )
 
 
@@ -284,7 +285,9 @@ async def accent_verify(
         primary_model="ECAPA-TDNN",
         primary_score=dual_scores.get("primary_score", score),
         secondary_model=None,
-        secondary_score=dual_scores.get("secondary_score"),
+        secondary_score=None,
+        wespeaker_model=dual_scores.get("wespeaker_model"),
+        wespeaker_score=dual_scores.get("wespeaker_score"),
     )
 
 
@@ -441,7 +444,9 @@ async def verify_voice(
             primary_model=dual_scores.get("primary_model", "ECAPA-TDNN"),
             primary_score=dual_scores.get("primary_score", score),
             secondary_model=dual_scores.get("secondary_model"),
-            secondary_score=dual_scores.get("secondary_score")
+            secondary_score=dual_scores.get("secondary_score"),
+            wespeaker_model=dual_scores.get("wespeaker_model"),
+            wespeaker_score=dual_scores.get("wespeaker_score")
         )
     
     # No accent profile - use legacy VoiceService directly
@@ -468,7 +473,9 @@ async def verify_voice(
         primary_model=dual_scores.get("primary_model", "ECAPA-TDNN"),
         primary_score=dual_scores.get("primary_score", score),
         secondary_model=dual_scores.get("secondary_model"),
-        secondary_score=dual_scores.get("secondary_score")
+        secondary_score=dual_scores.get("secondary_score"),
+        wespeaker_model=dual_scores.get("wespeaker_model"),
+        wespeaker_score=dual_scores.get("wespeaker_score")
     )
 
 
