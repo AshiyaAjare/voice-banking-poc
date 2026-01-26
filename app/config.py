@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     wespeaker_model_dir: Path = Path("pretrained_models/wespeaker")
     enable_wespeaker_comparison: bool = True  # Enable WeSpeaker for A/B comparison
     
+    # Qdrant Vector Database Settings
+    QDRANT_HOST: str = "localhost"
+    QDRANT_PORT: int = 6333
+    QDRANT_COLLECTION: str = "voice_embeddings"
+    QDRANT_VECTOR_DIM: int = 192  # ECAPA-TDNN embedding dimension
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

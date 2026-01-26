@@ -60,6 +60,7 @@ Thumbs.db
 storage/
 pretrained_models/
 audio/
+qdrant_data/
 
 # Jupyter notebooks
 .ipynb_checkpoints/

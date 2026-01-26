@@ -3,6 +3,8 @@ Voice service for enrollment and verification operations.
 
 Supports multi-sample enrollment where users provide multiple audio samples
 that are combined into a robust speaker profile (centroid).
+
+Uses Qdrant vector database for embedding storage and similarity search.
 """
 import json
 import shutil
@@ -15,27 +17,29 @@ from app.config import get_settings
 from app.services.speaker_models.speaker_model_provider import get_speaker_model
 from app.services.embedding_utils import combine_embeddings, validate_embedding
 from app.services.audio_validator import audio_validator
+from app.services.vectordb.voice_vector_store import voice_vector_store
+from app.services.vectordb.collections import ensure_voice_collection
 
 
 class VoiceService:
     """Service for voice enrollment and verification operations."""
     
     # Schema version for multi-sample enrollment with dual models
-    SCHEMA_VERSION = 3
+    SCHEMA_VERSION = 4  # Bumped for Qdrant migration
     
     def __init__(self):
         self.settings = get_settings()
         self.speaker_model = get_speaker_model()
         self._ensure_storage_dirs()
+        # Ensure Qdrant collection exists on startup
+        try:
+            ensure_voice_collection()
+        except Exception as e:
+            print(f"Warning: Could not initialize Qdrant collection: {e}")
     
     def _ensure_storage_dirs(self) -> None:
-        """Ensure the storage directories exist."""
-        self.settings.embeddings_dir.mkdir(parents=True, exist_ok=True)
+        """Ensure the pending samples directory exists."""
         self.settings.pending_dir.mkdir(parents=True, exist_ok=True)
-    
-    def _get_embedding_path(self, user_id: str) -> Path:
-        """Get the file path for a user's finalized embedding."""
-        return self.settings.embeddings_dir / f"{user_id}.pt"
     
     def _get_pending_dir(self, user_id: str) -> Path:
         """Get the directory path for a user's pending enrollment."""
@@ -78,6 +82,7 @@ class VoiceService:
         }
         self._save_pending_metadata(user_id, metadata)
         return metadata
+
     def _add_pending_sample(
         self, 
         user_id: str, 
@@ -149,9 +154,8 @@ class VoiceService:
     
     def _finalize_enrollment(self, user_id: str) -> Tuple[bool, str]:
         """
-        Finalize enrollment by combining pending samples into centroids.
-        
-        Creates separate centroids for ECAPA-TDNN and WeSpeaker models.
+        Finalize enrollment by combining pending samples into centroids
+        and storing them in Qdrant.
         
         Returns:
             Tuple of (success, message)
@@ -183,18 +187,27 @@ class VoiceService:
                     data = torch.load(sample_path, weights_only=False)
                     sample_timestamps.append(data.get("collected_at", ""))
             
-            # Save the finalized profile with both embeddings
-            embedding_path = self._get_embedding_path(user_id)
-            profile_data = {
-                "embedding": centroid,
-                "wespeaker_embedding": wespeaker_centroid,
-                "created_at": datetime.utcnow().isoformat(),
+            # Convert centroid to list for Qdrant storage
+            centroid_list = centroid.squeeze().tolist()
+            
+            # Store in Qdrant
+            embedding_metadata = {
                 "version": self.SCHEMA_VERSION,
                 "sample_count": len(primary_embeddings),
-                "sample_timestamps": sample_timestamps
+                "sample_timestamps": sample_timestamps,
+                "model": "ECAPA-TDNN",
             }
             
-            torch.save(profile_data, embedding_path)
+            # Store WeSpeaker centroid as additional metadata if available
+            if wespeaker_centroid is not None:
+                embedding_metadata["wespeaker_centroid"] = wespeaker_centroid.squeeze().tolist()
+            
+            # Store in Qdrant
+            voice_vector_store.store_embedding(
+                user_id=user_id,
+                embedding=centroid_list,
+                metadata=embedding_metadata
+            )
             
             # Cleanup pending directory
             shutil.rmtree(self._get_pending_dir(user_id), ignore_errors=True)
@@ -222,6 +235,10 @@ class VoiceService:
         
         return True, samples_discarded
     
+    def _is_enrolled(self, user_id: str) -> bool:
+        """Check if user is enrolled in Qdrant."""
+        return voice_vector_store.user_exists(user_id)
+    
     def enroll_user(
         self, 
         user_id: str, 
@@ -231,7 +248,7 @@ class VoiceService:
         Enroll a user by collecting voice samples.
         
         Multi-sample enrollment: collects samples until minimum is reached,
-        then automatically finalizes the speaker profile.
+        then automatically finalizes the speaker profile in Qdrant.
         
         Args:
             user_id: Unique identifier for the user
@@ -241,8 +258,8 @@ class VoiceService:
             Tuple of (success, message, enrollment_complete, samples_collected, samples_required)
         """
         try:
-            # Check if user is already fully enrolled
-            if self._get_embedding_path(user_id).exists():
+            # Check if user is already fully enrolled in Qdrant
+            if self._is_enrolled(user_id):
                 return False, f"User '{user_id}' is already enrolled. Delete existing enrollment first.", True, 0, 0
             
             # Validate audio quality and speech presence
@@ -284,7 +301,7 @@ class VoiceService:
         audio_bytes: bytes
     ) -> Tuple[bool, float, str, Dict[str, Any]]:
         """
-        Verify a user's voice against their enrollment.
+        Verify a user's voice against their enrollment in Qdrant.
         
         Args:
             user_id: Unique identifier for the user
@@ -292,7 +309,7 @@ class VoiceService:
             
         Returns:
             Tuple of (matched, score, message, dual_model_scores)
-            dual_model_scores contains primary_model, primary_score, secondary_model, secondary_score
+            dual_model_scores contains primary_model, primary_score, wespeaker_model, wespeaker_score
         """
         dual_scores = {
             "primary_model": "ECAPA-TDNN",
@@ -302,9 +319,8 @@ class VoiceService:
         }
         
         try:
-            # Check if user is enrolled
-            embedding_path = self._get_embedding_path(user_id)
-            if not embedding_path.exists():
+            # Check if user is enrolled in Qdrant
+            if not self._is_enrolled(user_id):
                 # Check for pending enrollment
                 if self._has_pending_enrollment(user_id):
                     metadata = self._load_pending_metadata(user_id)
@@ -318,22 +334,34 @@ class VoiceService:
             if not validation_result.is_valid:
                 return False, 0.0, validation_result.error_message, dual_scores
             
-            # Load enrolled embedding
-            data = torch.load(embedding_path, weights_only=False)
-            enrolled_embedding = data["embedding"]
-            enrolled_wespeaker = data.get("wespeaker_embedding")
-            
             # Extract test embeddings from both models (parallel computation)
             test_primary, test_wespeaker = self.speaker_model.encode_audio_dual(audio_bytes)
             
-            # Compute ECAPA-TDNN similarity
-            primary_score = self.speaker_model.compute_similarity(enrolled_embedding, test_primary)
+            # Convert to list for Qdrant search
+            test_primary_list = test_primary.squeeze().tolist()
+            
+            # Search in Qdrant - cosine similarity is computed automatically
+            results = voice_vector_store.search_by_user(
+                user_id=user_id,
+                query_embedding=test_primary_list,
+                top_k=1
+            )
+            
+            if not results:
+                return False, 0.0, f"User '{user_id}' enrollment data not found in vector store", dual_scores
+            
+            # Qdrant returns cosine similarity score directly
+            primary_score = results[0].score
             dual_scores["primary_score"] = primary_score
             
             # Compute WeSpeaker similarity if available
-            if enrolled_wespeaker is not None and test_wespeaker is not None:
+            enrolled_record = results[0]
+            wespeaker_centroid_list = enrolled_record.payload.get("wespeaker_centroid")
+            
+            if wespeaker_centroid_list is not None and test_wespeaker is not None:
+                wespeaker_centroid = torch.tensor(wespeaker_centroid_list).unsqueeze(0)
                 wespeaker_score = self.speaker_model.compute_similarity_wespeaker(
-                    enrolled_wespeaker, test_wespeaker
+                    wespeaker_centroid, test_wespeaker
                 )
                 if wespeaker_score is not None:
                     dual_scores["wespeaker_model"] = "WeSpeaker"
@@ -366,15 +394,15 @@ class VoiceService:
         Returns:
             Tuple of (enrolled, created_at, enrollment_complete, samples_collected, samples_required)
         """
-        embedding_path = self._get_embedding_path(user_id)
-        
-        # Check for finalized enrollment
-        if embedding_path.exists():
+        # Check for finalized enrollment in Qdrant
+        if self._is_enrolled(user_id):
             try:
-                data = torch.load(embedding_path, weights_only=False)
-                created_at = datetime.fromisoformat(data.get("created_at", ""))
-                sample_count = data.get("sample_count", 1)  # Legacy has 1 sample
-                return True, created_at, True, sample_count, sample_count
+                results = voice_vector_store.get_by_user_id(user_id)
+                if results:
+                    payload = results[0].payload
+                    created_at = datetime.fromisoformat(payload.get("created_at", ""))
+                    sample_count = payload.get("sample_count", 1)
+                    return True, created_at, True, sample_count, sample_count
             except Exception:
                 return True, None, True, None, None
         
@@ -394,7 +422,7 @@ class VoiceService:
     
     def delete_enrollment(self, user_id: str) -> Tuple[bool, str]:
         """
-        Delete a user's voice enrollment.
+        Delete a user's voice enrollment from Qdrant.
         
         Args:
             user_id: Unique identifier for the user
@@ -402,16 +430,16 @@ class VoiceService:
         Returns:
             Tuple of (success, message)
         """
-        embedding_path = self._get_embedding_path(user_id)
+        is_enrolled = self._is_enrolled(user_id)
         has_pending = self._has_pending_enrollment(user_id)
         
-        if not embedding_path.exists() and not has_pending:
+        if not is_enrolled and not has_pending:
             return False, f"User '{user_id}' is not enrolled"
         
         try:
-            # Delete finalized enrollment if exists
-            if embedding_path.exists():
-                embedding_path.unlink()
+            # Delete from Qdrant if enrolled
+            if is_enrolled:
+                voice_vector_store.delete_by_user_id(user_id)
             
             # Delete pending enrollment if exists
             if has_pending:
