@@ -29,6 +29,7 @@ from app.models.schemas import (
 from app.models.accent import VerificationStrategy
 from app.services.voice_service import voice_service
 from app.services.accent.accent_profile_service import accent_profile_service
+from app.services.prompt_service import get_enrollment_prompt
 from app.core.crypto.xor_cipher import XORCipher
 
 
@@ -107,6 +108,7 @@ async def start_enrollment(request: StartEnrollmentRequest):
             secondary_language=result["secondary_language"],
             optional_languages=result.get("optional_languages"),
             samples_required_per_language=result["samples_required_per_language"],
+            first_prompt=get_enrollment_prompt(result["primary_language"], 0),
         )
     except ValueError as e:
         raise HTTPException(
@@ -153,6 +155,11 @@ async def add_enrollment_sample(
             detail=result["message"]
         )
     
+    # Get prompt for next sample if not complete
+    next_prompt = None
+    if not result["completed"]:
+        next_prompt = get_enrollment_prompt(language, result["samples_collected"])
+    
     return AccentEnrollmentSampleResponse(
         success=result["success"],
         user_id=user_id,
@@ -163,6 +170,7 @@ async def add_enrollment_sample(
         language_complete=result["completed"],
         detected_language=result.get("detected_language"),
         detection_confidence=result.get("detection_confidence"),
+        next_prompt=next_prompt,
     )
 
 

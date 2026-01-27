@@ -125,6 +125,10 @@ class StartEnrollmentResponse(BaseModel):
     secondary_language: Optional[str] = None
     optional_languages: Optional[List[str]] = None
     samples_required_per_language: int
+    first_prompt: Optional[str] = Field(
+        None,
+        description="First prompt sentence for the primary language"
+    )
 
 
 class LanguageEnrollmentProgress(BaseModel):
@@ -164,6 +168,10 @@ class AccentEnrollmentSampleResponse(BaseModel):
     language_complete: bool
     detected_language: Optional[str] = None
     detection_confidence: Optional[float] = None
+    next_prompt: Optional[str] = Field(
+        None,
+        description="Prompt sentence for the next recording (if not complete)"
+    )
 
 
 class AccentVerificationResponse(BaseModel):
